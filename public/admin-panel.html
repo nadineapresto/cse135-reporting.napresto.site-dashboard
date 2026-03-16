@@ -1,0 +1,458 @@
+<!-- Adapted (and revised according to personal project architecture) from CSE 135 Tutorial Site: `admin.html` -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Analytics Dashboard</title>
+    <link rel="stylesheet" href="/shared.css">
+    <style>
+        .container { 
+            max-width: 900px; 
+        }
+        .panel h2 { 
+            font-size: 1.05em; 
+            color: #2C2440; 
+            margin-bottom: 16px; 
+            padding-bottom: 10px; 
+            border-bottom: 2px solid #C1622F; 
+        }
+        .sidebar-divider { 
+            border: none; 
+            border-top: 1px solid rgba(255,255,255,0.1); 
+            margin: 8px 0; 
+        }
+        .sidebar a.admin-link { 
+            color: rgba(255,255,255,0.45); 
+            font-size: 0.9em; 
+        }
+        .sidebar a.admin-link:hover {
+            color: rgba(255,255,255,0.9); 
+            background: rgba(193,98,47,0.15); 
+        }
+        .sidebar a.admin-link.active { 
+            color: white; 
+        }
+        .table-wrap { 
+            overflow-x: auto; 
+            -webkit-overflow-scrolling: touch; 
+        }
+        table { 
+            min-width: 500px; 
+        }
+        .role-badge { 
+            display: inline-block; 
+            padding: 2px 10px; 
+            border-radius: 12px; 
+            font-size: 0.82em; 
+            font-weight: 600; 
+        }
+        .role-owner   { 
+            background: #FAECE7; 
+            color: #7A3D1A; 
+        }
+        .role-analyst { 
+            background: #d4efdf; 
+            color: #1e8449; 
+        }
+        .role-viewer  { 
+            background: #e8f4fc; 
+            color: #2471a3; 
+        }
+        .btn { 
+            padding: 5px 12px; 
+            border: none; 
+            border-radius: 4px; 
+            font-size: 0.85em; 
+            cursor: pointer; 
+            font-family: inherit; 
+        }
+        .btn-edit { 
+            background: #FAECE7; 
+            color: #C1622F; 
+        }
+        .btn-edit:hover { 
+            background: #F5D5C8; 
+        }
+        .btn-delete { 
+            background: #fdecea; 
+            color: #c0392b; 
+            margin-left: 6px; 
+        }
+        .btn-delete:hover { 
+            background: #f5c6cb; 
+        }
+        .form-row { 
+            display: flex; 
+            gap: 10px; 
+            flex-wrap: wrap; 
+            align-items: flex-end;
+        }
+        .form-group { 
+            flex: 1; 
+            min-width: 140px; 
+        }
+        .form-group label { 
+            display: block; 
+            font-size: 0.8em; 
+            font-weight: 600; 
+            color: #7A6E65; 
+            margin-bottom: 4px; 
+        }
+        .form-group input, .form-group select { 
+            width: 100%; 
+            padding: 8px 10px; 
+            border: 1px solid #E8DDD0; 
+            border-radius: 4px; 
+            font-size: 0.9em; 
+            font-family: inherit; 
+            background: #FDFAF5; 
+            color: #2C2440; 
+        }
+        .form-group input:focus, .form-group select:focus { 
+            outline: none; 
+            border-color: #C1622F; 
+            box-shadow: 0 0 0 3px rgba(193,98,47,0.12); 
+        }
+        .btn-submit { 
+            padding: 8px 20px; 
+            background: #C1622F; 
+            color: white; 
+            border: none; 
+            border-radius: 4px; 
+            font-size: 0.9em; 
+            font-weight: 600; 
+            cursor: pointer; 
+            font-family: inherit; 
+            white-space: nowrap; 
+            margin-top: 4px; 
+        }
+        .btn-submit:hover { 
+            background: #A0511F; 
+        }
+        .btn-submit:disabled { 
+            background: #E8C4B0; 
+            cursor: not-allowed; 
+        }
+        .edit-row td { 
+            background: #FDF5F0; 
+            padding: 12px; 
+        }
+        .edit-row .form-row { 
+            margin: 0; 
+        }
+    </style>
+</head>
+<body>
+<div class="layout">
+    <nav class="sidebar">
+        <a href="/dashboard">Overview</a>
+        <a href="/traffic">Traffic</a>
+        <a href="/performance">Performance</a>
+        <a href="/errors">Errors</a>
+        <a href="/saved-reports">Saved Reports</a>
+        <a href="/admin-panel" class="admin-link active">Admin Panel</a>
+    </nav>
+
+    <div class="main">
+        <div class="header">
+            <h1>Admin Panel</h1>
+            <span id="user-display"></span>
+            <button class="logout" id="logoutBtn">Logout</button>
+        </div>
+
+        <div class="container">
+            <div id="message-area"></div>
+
+            <div class="panel">
+                <h2>Users</h2>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Email</th>
+                                <th>Display Name</th>
+                                <th>Role</th>
+                                <th>Created</th>
+                                <th>Last Login</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="user-table-body">
+                            <tr><td colspan="6" class="empty-state">Loading users...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2>Add User</h2>
+                <form id="addUserForm">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="newEmail">Email</label>
+                            <input type="email" id="newEmail" placeholder="user@example.com" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="newName">Display Name</label>
+                            <input type="text" id="newName" placeholder="Jane Doe" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="newPassword">Password</label>
+                            <input type="password" id="newPassword" placeholder="Min 8 characters" required minlength="8">
+                        </div>
+                        <div class="form-group" style="min-width:110px; flex:0.5;">
+                            <label for="newRole">Role</label>
+                            <select id="newRole">
+                                <option value="viewer">Viewer</option>
+                                <option value="analyst">Analyst</option>
+                                <option value="owner">Owner</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn-submit">Add User</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    'use strict';
+
+    const tbody = document.getElementById('user-table-body');
+    const msgArea = document.getElementById('message-area');
+    var activeEditId = null;
+
+    // Auth check (owner only can access admin panel)
+    (async function () {
+        try {
+            var res = await fetch('/api/me', { credentials: 'include' });
+            if (res.status === 401) { window.location.href = '/login'; return; }
+            var data = await res.json();
+            document.getElementById('user-display').textContent = data.data.displayName;
+            if (data.data.role !== 'owner') {
+                window.location.href = '/dashboard';
+            }
+        } catch { window.location.href = '/login'; }
+    })();
+
+    document.getElementById('logoutBtn').addEventListener('click', function () {
+        fetch('/api/logout', { method: 'POST', credentials: 'include' })
+            .then(function () { window.location.href = '/login'; });
+    });
+
+    // Helper functions
+    function showMessage(text, type) {
+        const div = document.createElement('div');
+        div.className = 'message message-' + type;
+        div.textContent = text;
+        msgArea.innerHTML = '';
+        msgArea.appendChild(div);
+        setTimeout(function () { div.remove(); }, 4000);
+    }
+
+    function roleBadge(role) {
+        var span = document.createElement('span');
+        span.className = 'role-badge role-' + role;
+        span.textContent = role;
+        return span;
+    }
+
+    function formatDate(str) {
+        if (!str) return '—';
+        var d = new Date(str);
+        return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+
+    // Load users from /api/users
+    async function loadUsers() {
+        try {
+            const res = await fetch('/api/users', { credentials: 'include' });
+            if (res.status === 401) { window.location.href = '/login'; return; }
+            if (res.status === 403) {
+                tbody.innerHTML = '<tr><td colspan="6" class="empty-state">Access denied.</td></tr>';
+                return;
+            }
+            const data = await res.json();
+            if (!data.success) throw new Error(data.error);
+            renderTable(data.data);
+        } catch (err) {
+            showMessage('Failed to load users: ' + err.message, 'error');
+        }
+    }
+
+    function renderTable(users) {
+        tbody.innerHTML = '';
+        activeEditId = null;
+
+        if (!users.length) {
+            tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No users found.</td></tr>';
+            return;
+        }
+
+        users.forEach(function (u) {
+            tbody.appendChild(buildRow(u));
+        });
+    }
+
+    function buildRow(u) {
+        var tr = document.createElement('tr');
+        tr.dataset.id = u.id;
+
+        var tdEmail = document.createElement('td'); tdEmail.textContent = u.email;
+        var tdName  = document.createElement('td'); tdName.textContent  = u.display_name;
+        var tdRole  = document.createElement('td'); tdRole.appendChild(roleBadge(u.role));
+        var tdCreated   = document.createElement('td'); tdCreated.textContent   = formatDate(u.created_at);
+        var tdLastLogin = document.createElement('td'); tdLastLogin.textContent = formatDate(u.last_login);
+
+        var tdActions = document.createElement('td');
+
+        var editBtn = document.createElement('button');
+        editBtn.className = 'btn btn-edit';
+        editBtn.textContent = 'Edit';
+        editBtn.addEventListener('click', function () { openEditRow(u); });
+
+        var delBtn = document.createElement('button');
+        delBtn.className = 'btn btn-delete';
+        delBtn.textContent = 'Delete';
+        delBtn.addEventListener('click', function () { deleteUser(u.id, u.email); });
+
+        tdActions.appendChild(editBtn);
+        tdActions.appendChild(delBtn);
+
+        tr.appendChild(tdEmail);
+        tr.appendChild(tdName);
+        tr.appendChild(tdRole);
+        tr.appendChild(tdCreated);
+        tr.appendChild(tdLastLogin);
+        tr.appendChild(tdActions);
+
+        return tr;
+    }
+
+    // Edit an existing user where an edit row will appear underneath the row of the user
+    function openEditRow(u) {
+        // Close any edit row that's already opened
+        var existing = tbody.querySelector('.edit-row');
+        if (existing) existing.remove();
+        if (activeEditId === u.id) { activeEditId = null; return; }
+        activeEditId = u.id;
+
+        var sourceRow = tbody.querySelector('tr[data-id="' + u.id + '"]');
+        if (!sourceRow) return;
+
+        var editTr = document.createElement('tr');
+        editTr.className = 'edit-row';
+
+        var td = document.createElement('td');
+        td.colSpan = 6;
+
+        td.innerHTML =
+            '<div class="form-row">' +
+                '<div class="form-group">' +
+                    '<label>Display Name</label>' +
+                    '<input type="text" id="editName" value="' + escapeAttr(u.display_name) + '">' +
+                '</div>' +
+                '<div class="form-group" style="min-width:110px; flex:0.5;">' +
+                    '<label>Role</label>' +
+                    '<select id="editRole">' +
+                        '<option value="viewer"'   + (u.role === 'viewer'   ? ' selected' : '') + '>Viewer</option>' +
+                        '<option value="analyst"'  + (u.role === 'analyst'  ? ' selected' : '') + '>Analyst</option>' +
+                        '<option value="owner"'    + (u.role === 'owner'    ? ' selected' : '') + '>Owner</option>' +
+                    '</select>' +
+                '</div>' +
+                '<button class="btn-submit" id="saveEditBtn">Save</button>' +
+                '<button class="btn btn-edit" id="cancelEditBtn" style="margin-top:4px;">Cancel</button>' +
+            '</div>';
+
+        editTr.appendChild(td);
+        sourceRow.insertAdjacentElement('afterend', editTr);
+
+        document.getElementById('saveEditBtn').addEventListener('click', function () {
+            saveEdit(u.id);
+        });
+        document.getElementById('cancelEditBtn').addEventListener('click', function () {
+            editTr.remove();
+            activeEditId = null;
+        });
+    }
+
+    // Save edits made to a user using PUT /api/users at an id endpoint
+    async function saveEdit(id) {
+        var displayName = document.getElementById('editName').value.trim();
+        var role        = document.getElementById('editRole').value;
+        if (!displayName) { showMessage('Display name cannot be empty.', 'error'); return; }
+
+        try {
+            var res  = await fetch('/api/users/' + id, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ displayName: displayName, role: role })
+            });
+            var data = await res.json();
+            if (data.success) {
+                showMessage('User updated.', 'success');
+                loadUsers();
+            } else {
+                showMessage(data.error || 'Update failed.', 'error');
+            }
+        } catch { showMessage('Network error.', 'error'); }
+    }
+
+    // DELETE user at an id & email
+    function deleteUser(id, email) {
+        if (!confirm('Delete ' + email + '? This cannot be undone.')) return;
+        fetch('/api/users/' + id, { method: 'DELETE', credentials: 'include' })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (data.success) { showMessage('User deleted.', 'success'); loadUsers(); }
+                else showMessage(data.error || 'Delete failed.', 'error');
+            })
+            .catch(function () { showMessage('Network error.', 'error'); });
+    }
+
+    // POST new user info using /api/users endpoint
+    document.getElementById('addUserForm').addEventListener('submit', async function (e) {
+        e.preventDefault();
+        var btn = this.querySelector('.btn-submit');
+        btn.disabled = true;
+
+        var payload = {
+            email:       document.getElementById('newEmail').value.trim(),
+            displayName: document.getElementById('newName').value.trim(),
+            password:    document.getElementById('newPassword').value,
+            role:        document.getElementById('newRole').value
+        };
+
+        try {
+            var res  = await fetch('/api/users', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify(payload)
+            });
+            var data = await res.json();
+            if (data.success) {
+                showMessage('User created.', 'success');
+                this.reset();
+                loadUsers();
+            } else {
+                showMessage(data.error || 'Create failed.', 'error');
+            }
+        } catch { showMessage('Network error.', 'error'); }
+        finally { btn.disabled = false; }
+    });
+
+    // Escape helper for inline HTML
+    function escapeAttr(str) {
+        return String(str).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    loadUsers();
+})();
+</script>
+</body>
+</html>

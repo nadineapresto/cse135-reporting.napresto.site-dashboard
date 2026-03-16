@@ -1,0 +1,283 @@
+/* ============================================================
+   This file contains the shared styling of all pages.
+   All pages share the same sidebar, top header, styling,
+   and font (as well as the stats card for all report pages).
+
+   At the bottom is the styling for the 403.html & 404.html pages.
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600&display=swap');
+* { 
+    box-sizing: border-box; 
+    margin: 0; 
+    padding: 0; 
+}
+body {
+    font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #F5F0E8;
+    color: #2C2440;
+}
+.layout {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    min-height: 100vh;
+}
+.main { 
+    display: flex; 
+    flex-direction: column; 
+}
+.sidebar {
+    background: #3D3458;
+    border-right: none;
+    padding: 20px 0;
+}
+.sidebar a {
+    display: block;
+    padding: 10px 20px;
+    color: rgba(255, 255, 255, 0.6);
+    text-decoration: none;
+    font-size: 0.95em;
+    transition: background 0.15s, color 0.15s;
+}
+.sidebar a:hover {
+    background: rgba(193, 98, 47, 0.15);
+    color: rgba(255, 255, 255, 0.9);
+}
+.sidebar a.active {
+    background: rgba(193, 98, 47, 0.25);
+    color: white;
+    font-weight: 600;
+    border-left: 3px solid #C1622F;
+}
+.header {
+    background: #C1622F;
+    color: white;
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+.header h1 {
+    font-size: 1.3em;
+    font-weight: 600;
+    margin-right: auto;
+}
+.header label {
+    font-size: 0.85em;
+    opacity: 0.9;
+}
+.header input[type="date"] {
+    padding: 6px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.15);
+    color: white;
+    font-size: 0.85em;
+    font-family: inherit;
+}
+.header input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+}
+.header button.load {
+    padding: 6px 16px;
+    background: white;
+    color: #C1622F;
+    border: none;
+    border-radius: 4px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 0.85em;
+    font-family: inherit;
+}
+.header button.load:hover { 
+    background: #FDF5F0; 
+}
+.header button.load:disabled {
+    background: rgba(255, 255, 255, 0.4);
+    color: rgba(193, 98, 47, 0.5);
+    cursor: not-allowed;
+}
+.header #user-display {
+    font-size: 0.85em;
+    opacity: 0.85;
+}
+.header button.logout {
+    padding: 6px 14px;
+    background: rgba(255, 255, 255, 0.15);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85em;
+    font-family: inherit;
+}
+.header button.logout:hover { 
+    background: rgba(255, 255, 255, 0.25); 
+}
+.container {
+    max-width: 1000px;
+    margin: 24px auto;
+    padding: 0 20px;
+    width: 100%;
+}
+.panel {
+    background: #FDFAF5;
+    border-radius: 8px;
+    border: 1px solid #E8DDD0;
+    padding: 24px;
+    margin-bottom: 24px;
+}
+.panel h2 {
+    color: #C1622F;
+    font-size: 1.1em;
+    margin-bottom: 16px;
+    font-weight: 600;
+}
+table { 
+    width: 100%; 
+    border-collapse: collapse; 
+}
+th, td {
+    padding: 10px 12px;
+    text-align: left;
+    border-bottom: 1px solid #E8DDD0;
+}
+th {
+    background: #F5F0E8;
+    color: #7A6E65;
+    font-size: 0.8em;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    font-weight: 600;
+}
+td { 
+    font-size: 0.9em; 
+    color: #2C2440; 
+}
+tr:hover td { 
+    background: #FDF5F0; 
+}
+.cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+}
+.card {
+    border-radius: 8px;
+    padding: 20px;
+    color: white;
+    box-shadow: 0 2px 6px rgba(44, 36, 64, 0.12);
+}
+.card .label {
+    font-size: 0.78em;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    opacity: 0.9;
+    margin-bottom: 4px;
+}
+.card .value {
+    font-size: 1.9em;
+    font-weight: 700;
+    line-height: 1.2;
+}
+.card .rating {
+    font-size: 0.75em;
+    margin-top: 6px;
+    padding: 2px 10px;
+    background: rgba(255, 255, 255, 0.25);
+    border-radius: 10px;
+    display: inline-block;
+}
+.url-cell {
+    max-width: 400px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.empty-state {
+    text-align: center;
+    color: #A89880;
+    padding: 40px 20px;
+}
+.error-msg {
+    background: #FDF3E3;
+    border-left: 4px solid #C1622F;
+    color: #7A3D1A;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    border-radius: 4px;
+    display: none;
+}
+canvas { 
+    width: 100%; 
+    display: block; 
+}
+
+
+/*====== Error pages (403, 404) ===============================*/
+.error-page {
+    text-align: center;
+    max-width: 480px;
+    padding: 48px 32px;
+    background: #FDFAF5;
+    border-radius: 8px;
+    border: 1px solid #E8DDD0;
+}
+.error-code {
+    font-size: 5em;
+    font-weight: 700;
+    color: #E8DDD0;
+    line-height: 1;
+    margin-bottom: 8px;
+}
+.error-title {
+    font-size: 1.3em;
+    font-weight: 600;
+    color: #2C2440;
+    margin-bottom: 12px;
+}
+.error-desc {
+    font-size: 0.95em;
+    color: #7A6E65;
+    line-height: 1.6;
+    margin-bottom: 28px;
+}
+.error-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+.btn-home {
+    padding: 8px 20px;
+    background: #C1622F;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 0.9em;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    text-decoration: none;
+    display: inline-block;
+}
+.btn-back {
+    padding: 8px 20px;
+    background: #FDFAF5;
+    color: #2C2440;
+    border: 1px solid #E8DDD0;
+    border-radius: 4px;
+    font-size: 0.9em;
+    cursor: pointer;
+    font-family: inherit;
+    text-decoration: none;
+    display: inline-block;
+}
+.btn-home:hover { 
+    background: #A0511F; 
+}
+.btn-back:hover { 
+    background: #F5F0E8; 
+}

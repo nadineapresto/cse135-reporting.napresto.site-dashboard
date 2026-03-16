@@ -1,0 +1,392 @@
+<!-- Adapted (and revised according to personal project architecture) from CSE 135 Tutorial Site: `speed-report.html` -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Performance Report - Analytics Dashboard</title>
+    <link rel="stylesheet" href="/shared.css">
+    <style>
+        .cards { 
+            grid-template-columns: repeat(3, 1fr); 
+        }
+        .card { 
+            text-align: center; 
+        }
+        .url-cell { 
+            max-width: 280px; 
+        }
+        .slow-row { 
+            border-left: 4px solid #ff4e42; 
+        }
+        canvas { 
+            height: 220px; 
+        }
+        @media (max-width: 600px) { 
+            .cards { grid-template-columns: 1fr; } 
+            .url-cell { max-width: 140px; } 
+        }
+    </style>
+</head>
+<body>
+<div class="layout">
+    <nav class="sidebar">
+        <a href="/dashboard">Overview</a>
+        <a href="/traffic">Traffic</a>
+        <a href="/performance" class="active">Performance</a>
+        <a href="/errors">Errors</a>
+        <a href="/saved-reports">Saved Reports</a>
+        <a href="/admin-panel" id="adminLink" style="display: none;">Admin Panel</a>
+    </nav>
+    <div class="main">
+        <div class="header">
+            <h1>Performance Report</h1>
+            <label for="startDate">From</label>
+            <input type="date" id="startDate">
+            <label for="endDate">To</label>
+            <input type="date" id="endDate">
+            <button class="load" id="loadBtn">Load</button>
+            <button class="load" id="saveBtn">Save Report</button>
+            <span id="user-display"></span>
+            <button class="logout" id="logoutBtn">Logout</button>
+        </div>
+        <div class="container">
+            <div id="errorBox" class="error-msg"></div>
+
+            <div class="cards">
+                <div class="card" id="lcpCard" style="background:#ccc;">
+                    <div class="label">Avg Load Time</div>
+                    <div class="value" id="loadValue">&mdash;</div>
+                    <div class="rating" id="loadRating">Loading...</div>
+                </div>
+                <div class="card" id="ttfbCard" style="background:#ccc;">
+                    <div class="label">Avg TTFB</div>
+                    <div class="value" id="ttfbValue">&mdash;</div>
+                    <div class="rating" id="ttfbRating">Loading...</div>
+                </div>
+                <div class="card" id="domCard" style="background:#ccc;">
+                    <div class="label">Avg DOM Complete</div>
+                    <div class="value" id="domValue">&mdash;</div>
+                    <div class="rating" id="domRating">Loading...</div>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2>Load time trend</h2>
+                <canvas id="trendChart" width="950" height="220"></canvas>
+            </div>
+
+            <div class="panel">
+                <h2>Per-page performance</h2>
+                <div style="overflow-x:auto;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>URL</th>
+                                <th style="text-align:right;">Avg load (ms)</th>
+                                <th style="text-align:right;">Avg TTFB (ms)</th>
+                                <th style="text-align:right;">Avg DOM (ms)</th>
+                                <th style="text-align:right;">Samples</th>
+                            </tr>
+                        </thead>
+                        <tbody id="perfBody">
+                            <tr><td colspan="5" class="empty-state">Loading performance data...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+(function () {
+    'use strict';
+
+    var THRESHOLDS = {
+        load: { good: 2000, poor: 4000 },
+        ttfb: { good: 200,  poor: 600  },
+        dom:  { good: 2000, poor: 4000 }
+    };
+    var COLORS = { good: '#0cce6b', warn: '#ffa400', poor: '#ff4e42' };
+
+    var today = new Date();
+    var thirtyAgo = new Date(Date.now() - 30 * 86400000);
+    document.getElementById('endDate').value = formatDate(today);
+    document.getElementById('startDate').value = formatDate(thirtyAgo);
+
+    var trendChart = null;
+    var currentSnapshot = null;
+
+    // Auth check
+    (async function () {
+        try {
+            var res = await fetch('/api/me', { credentials: 'include' });
+            if (res.status === 401) { window.location.href = '/login'; return; }
+            var data = await res.json();
+            document.getElementById('user-display').textContent = data.data.displayName;
+
+            // If user is a viewer, redirect to /saved-reports
+            if (data.data.role === 'viewer') {
+                window.location.href = '/saved-reports';
+                return;
+            }
+
+            // If user is owner, then show the link to admin panel (hidden to all other user roles)
+            if (data.data.role === 'owner') {
+                document.getElementById('adminLink').style.display = 'block';
+            }
+
+            loadData();
+
+        } catch { window.location.href = '/login'; }
+    })();
+    
+    document.getElementById('loadBtn').addEventListener('click', loadData);
+    document.getElementById('saveBtn').addEventListener('click', saveReport);
+    document.getElementById('logoutBtn').addEventListener('click', function () {
+        fetch('/api/logout', { method: 'POST', credentials: 'include' })
+        .then(function () { window.location.href = '/login'; });
+    });
+    
+
+    function formatDate(d) {
+        return d.getFullYear() + '-' +
+            String(d.getMonth() + 1).padStart(2, '0') + '-' +
+            String(d.getDate()).padStart(2, '0');
+    }
+
+    function formatShortDate(dateStr) {
+        var d = new Date(dateStr);
+        var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        return months[d.getMonth()] + ' ' + d.getDate();
+    }
+
+    function getColor(metric, value) {
+        var t = THRESHOLDS[metric];
+        if (value <= t.good) return COLORS.good;
+        if (value <= t.poor) return COLORS.warn;
+        return COLORS.poor;
+    }
+
+    function getRating(metric, value) {
+        var t = THRESHOLDS[metric];
+        if (value <= t.good) return 'Good';
+        if (value <= t.poor) return 'Needs work';
+        return 'Poor';
+    }
+
+    function setCard(cardId, valueId, ratingId, displayVal, color, rating) {
+        document.getElementById(cardId).style.background = color;
+        document.getElementById(valueId).textContent = displayVal;
+        document.getElementById(ratingId).textContent = rating;
+    }
+
+    function showError(msg) {
+        var box = document.getElementById('errorBox');
+        box.textContent = msg; box.style.display = 'block';
+    }
+    function hideError() { document.getElementById('errorBox').style.display = 'none'; }
+
+    async function loadData() {
+        hideError();
+        var start = document.getElementById('startDate').value;
+        var end   = document.getElementById('endDate').value;
+        if (!start || !end) { showError('Please select both a start and end date.'); return; }
+
+        try {
+            var res = await fetch('/api/analytics/performance?start=' + encodeURIComponent(start) + '&end=' + encodeURIComponent(end), { credentials: 'include' });
+            if (res.status === 401) { window.location.href = '/login'; return; }
+            var json = await res.json();
+            if (!json.success) { showError(json.error || 'Failed to load data.'); return; }
+
+            var byDay  = json.data.byDay  || [];
+            var byPage = json.data.byPage || [];
+            currentSnapshot = { byDay: byDay, byPage: byPage };
+
+            renderCards(byPage);
+            renderTrendChart(byDay);
+            renderTable(byPage);
+        } catch (err) {
+            showError('Network error: could not reach the API.');
+        }
+    }
+
+    // Save report functionality using snapshots of data report page (accessible by analysts and admin/owner)
+    async function saveReport() {
+        if (!currentSnapshot) return;
+        var start = document.getElementById('startDate').value;
+        var end   = document.getElementById('endDate').value;
+        var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        function fmtTitle(d) { var p = d.split('-'); return months[parseInt(p[1])-1] + ' ' + parseInt(p[2]) + ', ' + p[0]; }
+        var title = 'Performance Report -- ' + fmtTitle(start) + ' to ' + fmtTitle(end);
+ 
+        var btn = document.getElementById('saveBtn');
+        btn.textContent = 'Saving...';
+ 
+        try {
+            var res = await fetch('/api/saved-reports', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ 
+                    title: title, 
+                    report_type: 'performance', 
+                    date_start: start, 
+                    date_end: end, 
+                    snapshot: currentSnapshot })
+            });
+            var data = await res.json();
+            if (data.success) {
+                window.location.href = '/saved-reports';
+            } else {
+                showError(data.error || 'Failed to save report.');
+                btn.textContent = 'Save Report';
+            }
+        } catch {
+            showError('Network error: could not save report.');
+            btn.textContent = 'Save Report';
+        }
+    }
+
+    function renderCards(byPage) {
+        if (!byPage.length) {
+            setCard('lcpCard',  'loadValue', 'loadRating', '—', '#ccc', 'No data');
+            setCard('ttfbCard', 'ttfbValue', 'ttfbRating', '—', '#ccc', 'No data');
+            setCard('domCard',  'domValue',  'domRating',  '—', '#ccc', 'No data');
+            return;
+        }
+        var totalLoad = 0, totalTtfb = 0, totalDom = 0, totalSamples = 0;
+        byPage.forEach(function (r) {
+            var s = r.samples || 1;
+            totalLoad += (r.avg_load_ms || 0) * s;
+            totalTtfb += (r.avg_ttfb_ms || 0) * s;
+            totalDom  += (r.avg_dom_ms  || 0) * s;
+            totalSamples += s;
+        });
+        var avgLoad = totalSamples ? Math.round(totalLoad / totalSamples) : 0;
+        var avgTtfb = totalSamples ? Math.round(totalTtfb / totalSamples) : 0;
+        var avgDom  = totalSamples ? Math.round(totalDom  / totalSamples) : 0;
+
+        setCard('lcpCard',  'loadValue', 'loadRating', avgLoad + 'ms', getColor('load', avgLoad), getRating('load', avgLoad));
+        setCard('ttfbCard', 'ttfbValue', 'ttfbRating', avgTtfb + 'ms', getColor('ttfb', avgTtfb), getRating('ttfb', avgTtfb));
+        setCard('domCard',  'domValue',  'domRating',  avgDom  + 'ms', getColor('dom',  avgDom),  getRating('dom',  avgDom));
+    }
+
+    // Uses html canvas instead of ChartJS
+    function renderTrendChart(byDay) {
+        if (trendChart) { trendChart.destroy(); }
+        var canvas = document.getElementById('trendChart');
+        var rect = canvas.getBoundingClientRect();
+        canvas.width  = rect.width  * (window.devicePixelRatio || 1);
+        canvas.height = rect.height * (window.devicePixelRatio || 1);
+        var ctx = canvas.getContext('2d');
+        ctx.scale(window.devicePixelRatio || 1, window.devicePixelRatio || 1);
+
+        var W = rect.width, H = rect.height;
+        var pad = { top: 20, right: 20, bottom: 40, left: 60 };
+        ctx.clearRect(0, 0, W, H);
+
+        if (!byDay.length) {
+            ctx.fillStyle = '#888'; ctx.font = '14px -apple-system, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('No performance data for the selected range.', W / 2, H / 2);
+            return;
+        }
+
+        var maxVal = 0;
+        byDay.forEach(function (d) { if (d.avg_load_ms > maxVal) maxVal = d.avg_load_ms; });
+        if (maxVal === 0) maxVal = 1;
+
+        var chartW = W - pad.left - pad.right;
+        var chartH = H - pad.top - pad.bottom;
+        var xStep = byDay.length > 1 ? chartW / (byDay.length - 1) : chartW;
+
+        // Grid lines
+        ctx.strokeStyle = '#eee'; ctx.lineWidth = 1;
+        for (var g = 0; g <= 4; g++) {
+            var gy = pad.top + (chartH / 4) * g;
+            ctx.beginPath(); ctx.moveTo(pad.left, gy); ctx.lineTo(W - pad.right, gy); ctx.stroke();
+            ctx.fillStyle = '#888'; ctx.font = '11px -apple-system, sans-serif'; ctx.textAlign = 'right';
+            ctx.fillText(Math.round(maxVal - (maxVal / 4) * g) + 'ms', pad.left - 8, gy + 4);
+        }
+
+        // Axes
+        ctx.strokeStyle = '#ccc'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(pad.left, pad.top); ctx.lineTo(pad.left, H - pad.bottom);
+        ctx.lineTo(W - pad.right, H - pad.bottom); ctx.stroke();
+
+        // Fill
+        ctx.fillStyle = 'rgba(46,134,193,0.1)';
+        ctx.beginPath();
+        byDay.forEach(function (d, i) {
+            var x = pad.left + i * xStep;
+            var y = pad.top + chartH - (d.avg_load_ms / maxVal) * chartH;
+            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        });
+        ctx.lineTo(pad.left + (byDay.length - 1) * xStep, H - pad.bottom);
+        ctx.lineTo(pad.left, H - pad.bottom); ctx.closePath(); ctx.fill();
+
+        // Line
+        ctx.strokeStyle = '#2E86C1'; ctx.lineWidth = 2;
+        ctx.beginPath();
+        byDay.forEach(function (d, i) {
+            var x = pad.left + i * xStep;
+            var y = pad.top + chartH - (d.avg_load_ms / maxVal) * chartH;
+            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+
+        // Dots
+        ctx.fillStyle = '#2E86C1';
+        byDay.forEach(function (d, i) {
+            var x = pad.left + i * xStep;
+            var y = pad.top + chartH - (d.avg_load_ms / maxVal) * chartH;
+            ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill();
+        });
+
+        // X labels
+        ctx.fillStyle = '#888'; ctx.font = '11px -apple-system, sans-serif'; ctx.textAlign = 'center';
+        var interval = Math.max(1, Math.floor(byDay.length / 7));
+        byDay.forEach(function (d, i) {
+            if (i % interval === 0) {
+                ctx.fillText(formatShortDate(d.day), pad.left + i * xStep, H - pad.bottom + 20);
+            }
+        });
+    }
+
+    function renderTable(byPage) {
+        var tbody = document.getElementById('perfBody');
+        tbody.innerHTML = '';
+        if (!byPage.length) {
+            tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No performance data for the selected date range.</td></tr>';
+            return;
+        }
+        byPage.forEach(function (row) {
+            var tr = document.createElement('tr');
+            if (row.avg_load_ms > 3000) tr.className = 'slow-row';
+
+            var urlTd = document.createElement('td');
+            urlTd.className = 'url-cell';
+            urlTd.textContent = row.url;
+            urlTd.title = row.url;
+            tr.appendChild(urlTd);
+
+            [row.avg_load_ms, row.avg_ttfb_ms, row.avg_dom_ms, row.samples].forEach(function (val) {
+                var td = document.createElement('td');
+                td.textContent = val != null ? val : '—';
+                td.style.textAlign = 'right';
+                tr.appendChild(td);
+            });
+            tbody.appendChild(tr);
+        });
+    }
+
+    var resizeTimer;
+    window.addEventListener('resize', function () {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(loadData, 250);
+    });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Saved Reports - Analytics Dashboard</title>
+    <link rel="stylesheet" href="/shared.css">
+    <style>
+        .empty-page { 
+            text-align: center; 
+            padding: 80px 20px; 
+            color: #A89880; 
+        }
+        .empty-page h2 { 
+            font-size: 1.2em; 
+            margin-bottom: 8px; 
+            color: #7A6E65; 
+        }
+        .report-card { 
+            background: #FDFAF5; 
+            border-radius: 8px; 
+            border: 1px solid #E8DDD0; 
+            margin-bottom: 32px; 
+            overflow: hidden; 
+        }
+        .report-card-header { 
+            padding: 20px 24px; 
+            border-bottom: 1px solid #E8DDD0; 
+            display: flex; 
+            align-items: flex-start; 
+            gap: 12px; 
+            flex-wrap: wrap; 
+        }
+        .report-card-header h2 { 
+            font-size: 1.1em; color: #2C2440; 
+            flex: 1; 
+        }
+        .report-meta { 
+            font-size: 0.82em; 
+            color: #A89880; 
+            margin-top: 4px; 
+        }
+        .type-badge { 
+            padding: 3px 10px; 
+            border-radius: 12px; 
+            font-size: 0.8em; 
+            font-weight: 600; 
+            white-space: nowrap; 
+        }
+        .type-traffic { 
+            background: #FAECE7; 
+            color: #7A3D1A; 
+        }
+        .type-performance { 
+            background: #D4EFDF; 
+            color: #1E8449; 
+        }
+        .type-errors { 
+            background: #FDECEA;
+            color: #C0392B; 
+        }
+        .card-actions { 
+            display: flex; 
+            gap: 8px; 
+            align-items: center; 
+        }
+        .btn { 
+            padding: 5px 12px; 
+            border: none; 
+            border-radius: 4px; 
+            font-size: 0.85em; 
+            cursor: pointer; 
+            font-family: inherit; 
+        }
+        .btn-print { 
+            background: #FAECE7;
+            color: #C1622F;
+        }
+        .btn-print:hover { 
+            background: #F5D5C8; 
+        }
+        .btn-delete { 
+            background: #FDECEA; 
+            color: #C0392B; 
+        }
+        .btn-delete:hover { 
+            background: #F5C6CB; 
+        }
+        .report-body { 
+            padding: 24px; 
+        }
+        .snapshot-section { 
+            margin-bottom: 24px; 
+        }
+        .snapshot-section h3 { 
+            font-size: 0.85em; 
+            color: #C1622F;
+            margin-bottom: 12px; 
+            text-transform: uppercase; 
+            letter-spacing: 0.4px; 
+            font-weight: 600; 
+        }
+        .stat-cards { 
+            display: flex; 
+            gap: 12px; 
+            flex-wrap: wrap; 
+        }
+        .stat-card { 
+            border-radius: 6px; 
+            padding: 14px 18px; 
+            color: white; 
+            min-width: 120px; 
+            flex: 1; 
+        }
+        .stat-card .s-label { 
+            font-size: 0.73em; 
+            text-transform: uppercase; 
+            letter-spacing: 0.4px; 
+            opacity: 0.9; 
+            margin-bottom: 2px; 
+        }
+        .stat-card .s-value { 
+            font-size: 1.4em; 
+            font-weight: 700; 
+        }
+        .chart-wrap { 
+            position: relative; 
+            height: 200px; 
+        }
+        canvas.snap-chart { 
+            width: 100%; 
+            height: 200px; 
+        }
+        .url-cell { 
+            max-width: 350px; 
+        }
+        .slow-row { 
+            border-left: 3px solid #FF4E42; 
+        }
+        .comment-section { 
+            border-top: 1px solid #E8DDD0; 
+            padding: 20px 24px; background: #F5F0E8;
+        }
+        .comment-section h3 { 
+            font-size: 0.85em; 
+            color: #7A6E65; 
+            text-transform: uppercase; 
+            letter-spacing: 0.3px; 
+            margin-bottom: 10px; 
+            font-weight: 600; 
+        }
+        .comment-text { 
+            font-size: 0.95em; 
+            color: #2C2440; 
+            line-height: 1.6; 
+            white-space: pre-wrap; 
+            padding: 12px; 
+            background: #FDFAF5;
+            border: 1px solid #E8DDD0; 
+            border-radius: 4px; 
+            min-height: 60px; 
+        }
+        .comment-text.placeholder { 
+            color: #C4B8A8; 
+            font-style: italic; 
+        }
+        textarea.comment-input { 
+            width: 100%; 
+            padding: 10px 12px; 
+            border: 1px solid #E8DDD0; 
+            border-radius: 4px; 
+            font-size: 0.95em; 
+            font-family: inherit; 
+            resize: vertical; 
+            min-height: 100px; 
+            line-height: 1.6; 
+            background: #FDFAF5; 
+            color: #2C2440; 
+        }
+        textarea.comment-input:focus { 
+            outline: none; 
+            border-color: #C1622F; 
+            box-shadow: 0 0 0 3px rgba(193,98,47,0.1); 
+        }
+        .comment-actions { 
+            margin-top: 8px; 
+            display: flex; 
+            align-items: center; 
+            gap: 10px; 
+        }
+        .btn-save-comment { 
+            padding: 6px 16px; 
+            background: #C1622F; 
+            color: white; 
+            border: none; 
+            border-radius: 4px; 
+            font-size: 0.88em; 
+            font-weight: 600; 
+            cursor: pointer; 
+            font-family: inherit; 
+        }
+        .btn-save-comment:hover { 
+            background: #A0511F; 
+        }
+        .btn-save-comment:disabled { 
+            background: #E8C4B0; 
+            cursor: not-allowed; 
+        }
+        .comment-saved { 
+            font-size: 0.85em; 
+            color: #1e8449; 
+            display: none; 
+        }
+        @media print {
+            .sidebar, .header, .card-actions, .comment-actions, .btn, textarea { display: none !important; }
+            .layout { display: block; }
+            .report-card { box-shadow: none; border: 1px solid #E8DDD0; page-break-after: always; }
+            body { background: white; }
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="layout">
+    <nav class="sidebar">
+        <a href="/dashboard">Overview</a>
+        <a href="/traffic">Traffic</a>
+        <a href="/performance">Performance</a>
+        <a href="/errors">Errors</a>
+        <a href="/saved-reports" class="active">Saved Reports</a>
+        <a href="/admin-panel" id="adminLink" style="display:none;">Admin Panel</a>
+    </nav>
+    <div class="main">
+        <div class="header">
+            <h1>Saved Reports</h1>
+            <span id="user-display"></span>
+            <button class="logout" id="logoutBtn">Logout</button>
+        </div>
+        <div class="container">
+            <div id="errorBox" class="error-msg"></div>
+            <div id="reportsList"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    'use strict';
+
+    var currentRole = null;
+    var chartInstances = {};
+
+    // Auth check (all roles can access this page, but still have to prompt to display owners' Admin Panel)
+    (async function () {
+        try {
+            var res  = await fetch('/api/me', { credentials: 'include' });
+            if (res.status === 401) { window.location.href = '/login'; return; }
+            var data = await res.json();
+            document.getElementById('user-display').textContent = data.data.displayName;
+
+            currentRole = data.data.role;
+            if (currentRole === 'owner') {
+                document.getElementById('adminLink').style.display = 'block';
+            }
+
+            loadReports();
+
+        } catch { window.location.href = '/login'; }
+    })();
+
+    document.getElementById('logoutBtn').addEventListener('click', function () {
+        fetch('/api/logout', { method: 'POST', credentials: 'include' })
+            .then(function () { window.location.href = '/login'; });
+    });
+
+    // Helper functions
+    function fmtDate(str) {
+        if (!str) return '-';
+        var d = new Date(str);
+        var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        return months[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
+    }
+
+    function fmtShort(dateStr) {
+        var d = new Date(dateStr);
+        var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        return months[d.getMonth()] + ' ' + d.getDate();
+    }
+
+    function showError(msg) {
+        var box = document.getElementById('errorBox');
+        box.textContent = msg; box.style.display = 'block';
+    }
+
+    // Load reports stored in MYSQL database using /api/saved-reports endpoint
+    async function loadReports() {
+        try {
+            var res  = await fetch('/api/saved-reports', { credentials: 'include' });
+            if (res.status === 401) { window.location.href = '/login'; return; }
+            var data = await res.json();
+            if (!data.success) { showError(data.error || 'Failed to load reports.'); return; }
+            renderReports(data.data);
+        } catch { showError('Network error: could not load saved reports.'); }
+    }
+
+    function renderReports(reports) {
+        var container = document.getElementById('reportsList');
+        container.innerHTML = '';
+
+        if (!reports.length) {
+            container.innerHTML =
+                '<div class="empty-page">' +
+                '<h2>No saved reports yet</h2>' +
+                '<p>Load a Traffic, Performance, or Error report and click "Save Report" to create one.</p>' +
+                '</div>';
+            return;
+        }
+
+        reports.forEach(function (r) {
+            var snapshot = typeof r.snapshot === 'string' ? JSON.parse(r.snapshot) : r.snapshot;
+            var card = buildCard(r, snapshot);
+            container.appendChild(card);
+        });
+    }
+
+    // Building the report card using the snapshot
+    function buildCard(r, snapshot) {
+        var card = document.createElement('div');
+        card.className = 'report-card';
+        card.id = 'report-' + r.id;
+
+        // Header
+        var header = document.createElement('div');
+        header.className = 'report-card-header';
+
+        var titleWrap = document.createElement('div');
+        titleWrap.style.flex = '1';
+        var h2 = document.createElement('h2');
+        h2.textContent = r.title;
+        var meta = document.createElement('div');
+        meta.className = 'report-meta';
+        meta.textContent = 'Saved by ' + r.created_by_name + ' on ' + fmtDate(r.created_at) + ' \u00b7 ' + fmtDate(r.date_start) + ' -- ' + fmtDate(r.date_end);
+        titleWrap.appendChild(h2);
+        titleWrap.appendChild(meta);
+
+        var badge = document.createElement('span');
+        badge.className = 'type-badge type-' + r.report_type;
+        badge.textContent = r.report_type.charAt(0).toUpperCase() + r.report_type.slice(1);
+
+        var actions = document.createElement('div');
+        actions.className = 'card-actions';
+
+        var printBtn = document.createElement('button');
+        printBtn.className = 'btn btn-print';
+        printBtn.textContent = 'Print / PDF';
+        printBtn.addEventListener('click', function () { window.print(); });
+        actions.appendChild(printBtn);
+
+        if (currentRole === 'owner') {
+            var delBtn = document.createElement('button');
+            delBtn.className = 'btn btn-delete';
+            delBtn.textContent = 'Delete';
+            delBtn.addEventListener('click', function () { deleteReport(r.id, card); });
+            actions.appendChild(delBtn);
+        }
+
+        header.appendChild(titleWrap);
+        header.appendChild(badge);
+        header.appendChild(actions);
+        card.appendChild(header);
+
+        // Body (using the snapshot of data report)
+        var body = document.createElement('div');
+        body.className = 'report-body';
+
+        if (r.report_type === 'traffic') {
+            body.appendChild(buildTrafficSnapshot(r.id, snapshot));
+        } else if (r.report_type === 'performance') {
+            body.appendChild(buildPerformanceSnapshot(r.id, snapshot));
+        } else if (r.report_type === 'errors') {
+            body.appendChild(buildErrorsSnapshot(r.id, snapshot));
+        }
+
+        card.appendChild(body);
+
+        // Analyst comment
+        card.appendChild(buildCommentSection(r));
+
+        return card;
+    }
+
+    // Building a traffic snapshot
+    function buildTrafficSnapshot(id, snap) {
+        var frag = document.createDocumentFragment();
+        var stats = snap.stats || {};
+        var byDay = snap.byDay || [];
+        var topPages = snap.topPages || [];
+
+        // Stat cards
+        var statsSection = document.createElement('div');
+        statsSection.className = 'snapshot-section';
+        var h3 = document.createElement('h3'); h3.textContent = 'Summary';
+        statsSection.appendChild(h3);
+        var statCards = document.createElement('div');
+        statCards.className = 'stat-cards';
+        var total = byDay.reduce(function (s, d) { return s + Number(d.views); }, 0);
+        var bounceRate = stats.bounce_rate_pct || 0;
+        var bounceColor = bounceRate <= 40 ? '#0cce6b' : bounceRate <= 70 ? '#ffa400' : '#ff4e42';
+        [
+            { label: 'Total Pageviews', value: total.toLocaleString(), color: '#2E86C1' },
+            { label: 'Avg Session', value: (stats.avg_duration_sec || 0) + 's', color: '#2E86C1' },
+            { label: 'Pages / Session', value: stats.avg_pages || '—', color: '#2E86C1' },
+            { label: 'Bounce Rate', value: bounceRate + '%', color: bounceColor },
+        ].forEach(function (m) {
+            var sc = document.createElement('div');
+            sc.className = 'stat-card';
+            sc.style.background = m.color;
+            sc.innerHTML = '<div class="s-label">' + m.label + '</div><div class="s-value">' + m.value + '</div>';
+            statCards.appendChild(sc);
+        });
+        statsSection.appendChild(statCards);
+        frag.appendChild(statsSection);
+
+        // Trend chart
+        if (byDay.length) {
+            var chartSection = document.createElement('div');
+            chartSection.className = 'snapshot-section';
+            var ch3 = document.createElement('h3');
+            ch3.textContent = 'Pageviews Over Time';
+            chartSection.appendChild(ch3);
+            var wrap = document.createElement('div');
+            wrap.className = 'chart-wrap';
+            var canvas = document.createElement('canvas');
+            canvas.className = 'snap-chart'; canvas.id = 'chart-traffic-' + id;
+            wrap.appendChild(canvas); chartSection.appendChild(wrap);
+            frag.appendChild(chartSection);
+
+            setTimeout(function () {
+                if (chartInstances['chart-traffic-' + id]) chartInstances['chart-traffic-' + id].destroy();
+                chartInstances['chart-traffic-' + id] = new Chart(canvas, {
+                    type: 'line',
+                    data: {
+                        labels: byDay.map(function (d) { return fmtShort(d.day); }),
+                        datasets: [{ label: 'Pageviews', data: byDay.map(function (d) { return Number(d.views); }), borderColor: '#2E86C1', backgroundColor: 'rgba(46,134,193,0.1)', tension: 0.3, fill: true, pointRadius: 3 }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
+                });
+            }, 0);
+        }
+
+        // Top pages table
+        if (topPages.length) {
+            var tblSection = document.createElement('div');
+            tblSection.className = 'snapshot-section';
+            var th3 = document.createElement('h3');
+            th3.textContent = 'Top Pages';
+            tblSection.appendChild(th3);
+            var tbl = document.createElement('table');
+            tbl.innerHTML = '<thead><tr><th>URL</th><th style="text-align:right;">Views</th></tr></thead>';
+            var tbody = document.createElement('tbody');
+            topPages.slice(0, 10).forEach(function (p) {
+                var tr = document.createElement('tr');
+                var tdUrl = document.createElement('td'); tdUrl.className = 'url-cell'; tdUrl.textContent = p.url; tdUrl.title = p.url;
+                var tdV = document.createElement('td'); tdV.textContent = Number(p.views).toLocaleString(); tdV.style.textAlign = 'right';
+                tr.appendChild(tdUrl); tr.appendChild(tdV); tbody.appendChild(tr);
+            });
+            tbl.appendChild(tbody); tblSection.appendChild(tbl); frag.appendChild(tblSection);
+        }
+
+        return frag;
+    }
+
+    // Buidling a performance snapshot
+    function buildPerformanceSnapshot(id, snap) {
+        var frag = document.createDocumentFragment();
+        var byDay = snap.byDay || [];
+        var byPage = snap.byPage || [];
+
+        // Compute averages
+        var totalLoad = 0, totalTtfb = 0, totalSamples = 0;
+        byPage.forEach(function (r) { var s = r.samples || 1; totalLoad += (r.avg_load_ms||0)*s; totalTtfb += (r.avg_ttfb_ms||0)*s; totalSamples += s; });
+        var avgLoad = totalSamples ? Math.round(totalLoad/totalSamples) : 0;
+        var avgTtfb = totalSamples ? Math.round(totalTtfb/totalSamples) : 0;
+        var loadColor = avgLoad <= 2000 ? '#0cce6b' : avgLoad <= 4000 ? '#ffa400' : '#ff4e42';
+        var ttfbColor = avgTtfb <= 200  ? '#0cce6b' : avgTtfb <= 600  ? '#ffa400' : '#ff4e42';
+
+        var statsSection = document.createElement('div');
+        statsSection.className = 'snapshot-section';
+        var h3 = document.createElement('h3');
+        h3.textContent = 'Summary';
+        statsSection.appendChild(h3);
+        var statCards = document.createElement('div');
+        statCards.className = 'stat-cards';
+
+        [
+            { label: 'Avg Load Time', value: avgLoad + 'ms', color: loadColor },
+            { label: 'Avg TTFB',      value: avgTtfb + 'ms', color: ttfbColor },
+        ].forEach(function (m) {
+            var sc = document.createElement('div'); 
+            sc.className = 'stat-card';
+            sc.style.background = m.color;
+            sc.innerHTML = '<div class="s-label">' + m.label + '</div><div class="s-value">' + m.value + '</div>';
+            statCards.appendChild(sc);
+        });
+
+        statsSection.appendChild(statCards);
+        frag.appendChild(statsSection);
+
+        // Trend chart
+        if (byDay.length) {
+            var chartSection = document.createElement('div');
+            chartSection.className = 'snapshot-section';
+            var ch3 = document.createElement('h3');
+            ch3.textContent = 'Load Time Trend';
+            chartSection.appendChild(ch3);
+            var wrap = document.createElement('div');
+            wrap.className = 'chart-wrap';
+            var canvas = document.createElement('canvas');
+            canvas.className = 'snap-chart';
+            canvas.id = 'chart-perf-' + id;
+            wrap.appendChild(canvas);
+            chartSection.appendChild(wrap);
+            frag.appendChild(chartSection);
+
+            setTimeout(function () {
+                if (chartInstances['chart-perf-' + id]) chartInstances['chart-perf-' + id].destroy();
+                chartInstances['chart-perf-' + id] = new Chart(canvas, {
+                    type: 'line',
+                    data: {
+                        labels: byDay.map(function (d) { return fmtShort(d.day); }),
+                        datasets: [{ label: 'Avg Load (ms)', data: byDay.map(function (d) { return d.avg_load_ms; }), borderColor: '#2E86C1', backgroundColor: 'rgba(46,134,193,0.1)', tension: 0.3, fill: true, pointRadius: 3 }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+                });
+            }, 0);
+        }
+
+        // Per-page table
+        if (byPage.length) {
+            var tblSection = document.createElement('div');
+            tblSection.className = 'snapshot-section';
+            var th3 = document.createElement('h3');
+            th3.textContent = 'Per-Page Performance';
+            tblSection.appendChild(th3);
+            var tbl = document.createElement('table');
+            tbl.innerHTML = '<thead><tr><th>URL</th><th style="text-align:right;">Avg Load</th><th style="text-align:right;">Avg TTFB</th><th style="text-align:right;">Samples</th></tr></thead>';
+            var tbody = document.createElement('tbody');
+
+            byPage.forEach(function (row) {
+                var tr = document.createElement('tr');
+                if (row.avg_load_ms > 3000) tr.className = 'slow-row';
+                var tdUrl = document.createElement('td'); tdUrl.className = 'url-cell'; tdUrl.textContent = row.url; tdUrl.title = row.url;
+                tr.appendChild(tdUrl);
+                [row.avg_load_ms != null ? row.avg_load_ms + 'ms' : '—', row.avg_ttfb_ms != null ? row.avg_ttfb_ms + 'ms' : '—', row.samples].forEach(function (v) {
+                    var td = document.createElement('td'); td.textContent = v; td.style.textAlign = 'right'; tr.appendChild(td);
+                });
+                tbody.appendChild(tr);
+            });
+            tbl.appendChild(tbody); tblSection.appendChild(tbl); frag.appendChild(tblSection);
+        }
+
+        return frag;
+    }
+
+    // Building an Errors snapshot
+    function buildErrorsSnapshot(id, snap) {
+        var frag = document.createDocumentFragment();
+        var trend = snap.trend || [];
+        var byMessage = snap.byMessage || [];
+        var totalErrors = byMessage.reduce(function (s, r) { return s + Number(r.occurrences); }, 0);
+        var errColor = totalErrors === 0 ? '#0cce6b' : totalErrors <= 10 ? '#ffa400' : '#ff4e42';
+
+        var statsSection = document.createElement('div');
+        statsSection.className = 'snapshot-section';
+        var h3 = document.createElement('h3');
+        h3.textContent = 'Summary';
+        statsSection.appendChild(h3);
+        var statCards = document.createElement('div');
+        statCards.className = 'stat-cards';
+        var sc = document.createElement('div');
+        sc.className = 'stat-card';
+        sc.style.background = errColor;
+        sc.innerHTML = '<div class="s-label">Total Errors</div><div class="s-value">' + totalErrors.toLocaleString() + '</div>';
+        statCards.appendChild(sc);
+        statsSection.appendChild(statCards);
+        frag.appendChild(statsSection);
+
+        // Trend chart
+        if (trend.length) {
+            var chartSection = document.createElement('div');
+            chartSection.className = 'snapshot-section';
+            var ch3 = document.createElement('h3'); 
+            ch3.textContent = 'Errors Per Day';
+            chartSection.appendChild(ch3);
+            var wrap = document.createElement('div');
+            wrap.className = 'chart-wrap';
+            var canvas = document.createElement('canvas');
+            canvas.className = 'snap-chart';
+            canvas.id = 'chart-err-' + id;
+            wrap.appendChild(canvas);
+            chartSection.appendChild(wrap);
+            frag.appendChild(chartSection);
+
+            setTimeout(function () {
+                if (chartInstances['chart-err-' + id]) chartInstances['chart-err-' + id].destroy();
+                chartInstances['chart-err-' + id] = new Chart(canvas, {
+                    type: 'line',
+                    data: {
+                        labels: trend.map(function (d) { return fmtShort(d.day); }),
+                        datasets: [{ label: 'Errors', data: trend.map(function (d) { return d.error_count; }), borderColor: '#ff4e42', backgroundColor: 'rgba(255,78,66,0.1)', tension: 0.3, fill: true, pointRadius: 3 }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
+                });
+            }, 0);
+        }
+
+        // Error table
+        if (byMessage.length) {
+            var tblSection = document.createElement('div');
+            tblSection.className = 'snapshot-section';
+            var th3 = document.createElement('h3');
+            th3.textContent = 'Error Frequency'; tblSection.appendChild(th3);
+            var tbl = document.createElement('table');
+            tbl.innerHTML = '<thead><tr><th>Error Message</th><th style="text-align:right;">Occurrences</th><th>Last Seen</th></tr></thead>';
+            var tbody = document.createElement('tbody');
+
+            byMessage.forEach(function (row) {
+                var tr = document.createElement('tr');
+                var tdMsg = document.createElement('td'); tdMsg.className = 'url-cell';
+                tdMsg.textContent = row.error_message || 'Unknown error (no message captured)';
+                tdMsg.title = row.error_message || '';
+                var tdOcc = document.createElement('td'); tdOcc.textContent = row.occurrences; tdOcc.style.textAlign = 'right';
+                var tdLast = document.createElement('td'); tdLast.textContent = fmtDate(row.last_seen);
+                tr.appendChild(tdMsg); tr.appendChild(tdOcc); tr.appendChild(tdLast); tbody.appendChild(tr);
+            });
+            tbl.appendChild(tbody); tblSection.appendChild(tbl); frag.appendChild(tblSection);
+        }
+
+        return frag;
+    }
+
+    // Building the analyst comment section
+    function buildCommentSection(r) {
+        var section = document.createElement('div');
+        section.className = 'comment-section';
+
+        var h3 = document.createElement('h3');
+        h3.textContent = 'Analyst Commentary';
+        section.appendChild(h3);
+
+        // User must have 'owner' or 'analyst' role to edit and add comments
+        var canEdit = (currentRole === 'owner' || currentRole === 'analyst');
+
+        if (canEdit) {
+            var textarea = document.createElement('textarea');
+            textarea.className = 'comment-input';
+            textarea.placeholder = 'Add your analysis and interpretation of this report here...';
+            textarea.value = r.analyst_comment || '';
+            section.appendChild(textarea);
+
+            var actions = document.createElement('div');
+            actions.className = 'comment-actions';
+
+            var saveBtn = document.createElement('button');
+            saveBtn.className = 'btn-save-comment';
+            saveBtn.textContent = 'Save Comment';
+
+            var savedMsg = document.createElement('span');
+            savedMsg.className = 'comment-saved';
+            savedMsg.textContent = 'Saved';
+
+            saveBtn.addEventListener('click', async function () {
+                saveBtn.disabled = true;
+                saveBtn.textContent = 'Saving...';
+                savedMsg.style.display = 'none';
+                try {
+                    var res = await fetch('/api/saved-reports/' + r.id, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'include',
+                        body: JSON.stringify({ analyst_comment: textarea.value })
+                    });
+                    var data = await res.json();
+                    if (data.success) {
+                        savedMsg.style.display = 'inline';
+                        setTimeout(function () { savedMsg.style.display = 'none'; }, 3000);
+                    }
+                } catch { /* silent fail */ }
+                finally {
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = 'Save Comment';
+                }
+            });
+
+            actions.appendChild(saveBtn);
+            actions.appendChild(savedMsg);
+            section.appendChild(actions);
+        } else {
+            // Viewer can only read comments, not add or edit
+            var display = document.createElement('div');
+            display.className = r.analyst_comment ? 'comment-text' : 'comment-text placeholder';
+            display.textContent = r.analyst_comment || 'No analyst commentary has been added yet.';
+            section.appendChild(display);
+        }
+
+        return section;
+    }
+
+    // DELETE report card (only owner can do this)
+    function deleteReport(id, cardEl) {
+        if (!confirm('Delete this saved report? This cannot be undone.')) return;
+        fetch('/api/saved-reports/' + id, { method: 'DELETE', credentials: 'include' })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (data.success) {
+                    cardEl.style.transition = 'opacity 0.3s';
+                    cardEl.style.opacity = '0';
+                    setTimeout(function () { cardEl.remove(); }, 300);
+                } else {
+                    alert(data.error || 'Delete failed.');
+                }
+            })
+            .catch(function () { alert('Network error.'); });
+    }
+
+})();
+</script>
+</body>
+</html>

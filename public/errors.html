@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Error Report - Analytics Dashboard</title>
+    <link rel="stylesheet" href="/shared.css">
+    <style>
+        .summary-card { 
+            background: #C1622F; 
+            color: white; 
+            border-radius: 8px; 
+            padding: 20px 24px; 
+            margin-bottom: 24px; 
+            display: inline-block; 
+            box-shadow: 0 2px 6px rgba(44,36,64,0.12); 
+        }
+        .summary-card .label { 
+            font-size: 0.8em; 
+            text-transform: uppercase; 
+            letter-spacing: 0.5px; 
+            opacity: 0.9; 
+        }
+        .summary-card .value { 
+            font-size: 2.2em; 
+            font-weight: 700; 
+            line-height: 1.2; 
+        }
+        .clickable-row { 
+            cursor: pointer; 
+        }
+        .clickable-row:hover td { 
+            background: #FDF5F0; 
+        }
+        .msg-cell { 
+            max-width: 400px; 
+            overflow: hidden; 
+            text-overflow: ellipsis; 
+            white-space: nowrap; 
+        }
+        .detail-row td { 
+            background: #F5F0E8; 
+            white-space: pre-wrap; 
+            font-family: 'Monaco', 'Menlo', monospace; 
+            font-size: 12px; color: #7A6E65; 
+            padding: 12px 16px; 
+            border-left: 3px solid #C1622F; 
+        }
+        @media (max-width: 600px) { 
+            .msg-cell { max-width: 180px; } 
+            table { font-size: 0.85em; } 
+            th, td { padding: 8px 6px; } 
+            canvas { height: 180px; } 
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="layout">
+    <nav class="sidebar">
+        <a href="/dashboard">Overview</a>
+        <a href="/traffic">Traffic</a>
+        <a href="/performance">Performance</a>
+        <a href="/errors" class="active">Errors</a>
+        <a href="/saved-reports">Saved Reports</a>
+        <a href="/admin-panel" id="adminLink" style="display: none;">Admin Panel</a>
+    </nav>
+    <div class="main">
+        <div class="header">
+            <h1>Error Report</h1>
+            <label for="startDate">From</label>
+            <input type="date" id="startDate">
+            <label for="endDate">To</label>
+            <input type="date" id="endDate">
+            <button class="load" id="loadBtn">Load</button>
+            <button class="load" id="saveBtn">Save Report</button>
+            <span id="user-display"></span>
+            <button class="logout" id="logoutBtn">Logout</button>
+        </div>
+        <div class="container">
+            <div id="errorBox" class="error-msg"></div>
+
+            <div class="summary-card">
+                <div class="label">Total Errors</div>
+                <div class="value" id="totalErrors">--</div>
+            </div>
+
+            <div class="panel">
+                <h2>Errors per day</h2>
+                <canvas id="trendChart" width="950" height="220"></canvas>
+            </div>
+
+            <div class="panel">
+                <h2>Error frequency</h2>
+                <div style="overflow-x:auto;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Error message</th>
+                                <th style="text-align:right;">Occurrences</th>
+                                <th>Last seen</th>
+                            </tr>
+                        </thead>
+                        <tbody id="errorBody">
+                            <tr><td colspan="3" class="empty-state">Loading error data...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+(function () {
+    'use strict';
+
+    var today = new Date();
+    var thirtyAgo = new Date(Date.now() - 30 * 86400000);
+    document.getElementById('endDate').value = formatDate(today);
+    document.getElementById('startDate').value = formatDate(thirtyAgo);
+
+    var currentSnapshot = null;
+
+    // Auth check
+    (async function () {
+        try {
+            var res = await fetch('/api/me', { credentials: 'include' });
+            if (res.status === 401) { window.location.href = '/login'; return; }
+            var data = await res.json();
+            document.getElementById('user-display').textContent = data.data.displayName;
+
+            // If user is a viewer, redirect to /saved-reports
+            if (data.data.role === 'viewer') {
+                window.location.href = '/saved-reports';
+                return;
+            }
+
+            // If user is owner, then show the link to admin panel (hidden to all other user roles)
+            if (data.data.role === 'owner') {
+                document.getElementById('adminLink').style.display = 'block';
+            }
+            
+            loadData();
+
+        } catch { window.location.href = '/login'; }
+    })();
+    
+    document.getElementById('loadBtn').addEventListener('click', loadData);
+    document.getElementById('saveBtn').addEventListener('click', saveReport);
+    document.getElementById('logoutBtn').addEventListener('click', function () {
+        fetch('/api/logout', { method: 'POST', credentials: 'include' })
+        .then(function () { window.location.href = '/login'; });
+    });
+    
+    
+    function formatDate(d) {
+        return d.getFullYear() + '-' +
+        String(d.getMonth() + 1).padStart(2, '0') + '-' +
+        String(d.getDate()).padStart(2, '0');
+    }
+
+    function formatShortDate(dateStr) {
+        var d = new Date(dateStr);
+        var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        return months[d.getMonth()] + ' ' + d.getDate();
+    }
+
+    function showError(msg) {
+        var box = document.getElementById('errorBox');
+        box.textContent = msg; box.style.display = 'block';
+    }
+    function hideError() { document.getElementById('errorBox').style.display = 'none'; }
+
+    async function loadData() {
+        hideError();
+        var start = document.getElementById('startDate').value;
+        var end   = document.getElementById('endDate').value;
+        if (!start || !end) { showError('Please select both a start and end date.'); return; }
+
+        try {
+            var res = await fetch('/api/analytics/errors?start=' + encodeURIComponent(start) + '&end=' + encodeURIComponent(end), { credentials: 'include' });
+            if (res.status === 401) { window.location.href = '/login'; return; }
+            var json = await res.json();
+            if (!json.success) { showError(json.error || 'Failed to load data.'); return; }
+
+            var byMessage = json.data.byMessage || [];
+            var trend     = json.data.trend     || [];
+            currentSnapshot = { byMessage: byMessage, trend: trend };
+
+            renderSummary(byMessage);
+            renderChart(trend);
+            renderTable(byMessage);
+        } catch (err) {
+            showError('Network error: could not reach the API.');
+        }
+    }
+
+    // Save report functionality using snapshots of data report page (accessible by analysts and admin/owner)
+    async function saveReport() {
+        if (!currentSnapshot) return;
+        var start = document.getElementById('startDate').value;
+        var end   = document.getElementById('endDate').value;
+        var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        function fmtTitle(d) { var p = d.split('-'); return months[parseInt(p[1])-1] + ' ' + parseInt(p[2]) + ', ' + p[0]; }
+        var title = 'Error Report -- ' + fmtTitle(start) + ' to ' + fmtTitle(end);
+ 
+        var btn = document.getElementById('saveBtn');
+        btn.textContent = 'Saving...';
+ 
+        try {
+            var res = await fetch('/api/saved-reports', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ 
+                    title: title, 
+                    report_type: 'errors', 
+                    date_start: start, 
+                    date_end: end, 
+                    snapshot: currentSnapshot })
+            });
+            var data = await res.json();
+            if (data.success) {
+                window.location.href = '/saved-reports';
+            } else {
+                showError(data.error || 'Failed to save report.');
+                btn.textContent = 'Save Report';
+            }
+        } catch {
+            showError('Network error: could not save report.');
+            btn.textContent = 'Save Report';
+        }
+    }
+
+    function renderSummary(byMessage) {
+        var total = byMessage.reduce(function (s, r) { return s + (r.occurrences || 0); }, 0);
+        document.getElementById('totalErrors').textContent = total.toLocaleString();
+    }
+
+    var errorChart = null;
+
+var errorChart = null;
+
+    function renderChart(trend) {
+        if (errorChart) { errorChart.destroy(); }
+        if (!trend.length) return;
+        errorChart = new Chart(document.getElementById('trendChart'), {
+            type: 'line',
+            data: {
+                labels: trend.map(function (d) { return formatShortDate(d.day); }),
+                datasets: [{
+                    label: 'Errors',
+                    data: trend.map(function (d) { return d.error_count; }),
+                    borderColor: '#ff4e42',
+                    backgroundColor: 'rgba(255,78,66,0.1)',
+                    tension: 0.3,
+                    fill: true,
+                    pointRadius: 3
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { display: false } },
+                scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+            }
+        });
+    }
+
+    function renderTable(byMessage) {
+        var tbody = document.getElementById('errorBody');
+        tbody.innerHTML = '';
+
+        if (!byMessage.length) {
+            tbody.innerHTML = '<tr><td colspan="3" class="empty-state">No errors for the selected date range.</td></tr>';
+            return;
+        }
+
+        byMessage.forEach(function (row) {
+            // Summary row
+            var tr = document.createElement('tr');
+            tr.className = 'clickable-row';
+
+            var msgTd = document.createElement('td');
+            msgTd.className = 'msg-cell';
+            var displayMsg = row.error_message || 'Unknown error (no message captured)';
+            msgTd.textContent = displayMsg;
+            msgTd.title = displayMsg;
+            tr.appendChild(msgTd);
+
+            var countTd = document.createElement('td');
+            countTd.textContent = row.occurrences;
+            countTd.style.textAlign = 'right';
+            tr.appendChild(countTd);
+
+            var dateTd = document.createElement('td');
+            dateTd.textContent = row.last_seen ? formatShortDate(row.last_seen) : '—';
+            tr.appendChild(dateTd);
+
+            // Detail row (hidden, click to expand)
+            var detailTr = document.createElement('tr');
+            detailTr.className = 'detail-row';
+            detailTr.style.display = 'none';
+            var detailTd = document.createElement('td');
+            detailTd.colSpan = 3;
+            detailTd.textContent = 'Page: ' + (row.sample_url || '—') + '\n' + (row.error_message || 'Unknown error (no message captured)');
+            detailTr.appendChild(detailTd);
+
+            (function (detail) {
+                tr.addEventListener('click', function () {
+                    detail.style.display = detail.style.display === 'none' ? '' : 'none';
+                });
+            })(detailTr);
+
+            tbody.appendChild(tr);
+            tbody.appendChild(detailTr);
+        });
+    }
+
+    var resizeTimer;
+    window.addEventListener('resize', function () {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(loadData, 250);
+    });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,325 @@
+<!-- Adapted (and revised according to personal project architecture) from CSE 135 Tutorial Site: `dashboard.html` -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Overview - Analytics Dashboard</title>
+    <link rel="stylesheet" href="/shared.css">
+    <style>
+        .cards { 
+            grid-template-columns: 
+            repeat(auto-fit, minmax(150px, 1fr)); 
+        }
+        .panel-header { 
+            display: flex; 
+            align-items: center; 
+            justify-content: space-between; 
+            margin-bottom: 16px; 
+        }
+        .panel-header h2 { 
+            color: #C1622F; 
+            font-size: 1.1em; 
+        }
+        .panel-header a { 
+            font-size: 0.85em; 
+            color: #C1622F; 
+            text-decoration: none; 
+            opacity: 0.75; 
+        }
+        .panel-header a:hover { 
+            opacity: 1; 
+            text-decoration: underline; 
+        }
+    </style>
+    <!-- Script for ChartJS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="layout">
+    <nav class="sidebar">
+        <a href="/dashboard" class="active">Overview</a>
+        <a href="/traffic">Traffic</a>
+        <a href="/performance">Performance</a>
+        <a href="/errors">Errors</a>
+        <a href="/saved-reports">Saved Reports</a>
+        <a href="/admin-panel" id="adminLink" style="display: none;">Admin Panel</a>
+    </nav>
+    <div class="main">
+        <div class="header">
+            <h1>Overview</h1>
+            <label for="startDate">From</label>
+            <input type="date" id="startDate">
+            <label for="endDate">To</label>
+            <input type="date" id="endDate">
+            <button class="load" id="loadBtn">Load</button>
+            <span id="user-display"></span>
+            <button class="logout" id="logoutBtn">Logout</button>
+        </div>
+        <div class="container">
+            <div id="errorBox" class="error-msg"></div>
+
+            <div class="cards" id="cards"></div>
+
+            <div class="panel">
+                <div class="panel-header">
+                    <h2>Pageviews over time</h2>
+                    <a href="/traffic">Full traffic report →</a>
+                </div>
+                <canvas id="trendChart" height="220"></canvas>
+            </div>
+
+            <div class="panel">
+                <div class="panel-header">
+                    <h2>Top pages</h2>
+                    <a href="/traffic">Full traffic report →</a>
+                </div>
+                <canvas id="topChart" height="300"></canvas>
+            </div>
+
+            <div class="panel">
+                <div class="panel-header">
+                    <h2>Top pages</h2>
+                    <a href="/traffic">See all →</a>
+                </div>
+                <div style="overflow-x:auto;">
+                    <table>
+                        <thead><tr><th>URL</th><th style="text-align:right;">Views</th></tr></thead>
+                        <tbody id="pagesBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+(function () {
+    'use strict';
+
+    var today = new Date();
+    var thirtyAgo = new Date(Date.now() - 30 * 86400000);
+    document.getElementById('endDate').value = formatDate(today);
+    document.getElementById('startDate').value = formatDate(thirtyAgo);
+
+    var trendChart = null, topChart = null;
+
+    // Auth check
+    (async function () {
+        try {
+            var res = await fetch('/api/me', { credentials: 'include' });
+            if (res.status === 401) { window.location.href = '/login'; return; }
+            var data = await res.json();
+            document.getElementById('user-display').textContent = data.data.displayName;
+
+            // If user is a viewer, redirect to /saved-reports
+            if (data.data.role === 'viewer') {
+                window.location.href = '/saved-reports';
+                return;
+            }
+
+            // If user is owner, then show the link to admin panel (hidden to all other user roles)
+            if (data.data.role === 'owner') {
+                document.getElementById('adminLink').style.display = 'block';
+            }
+            
+        } catch { window.location.href = '/login'; }
+    })();
+    
+    document.getElementById('loadBtn').addEventListener('click', loadData);
+    document.getElementById('logoutBtn').addEventListener('click', function () {
+        fetch('/api/logout', { method: 'POST', credentials: 'include' })
+        .then(function () { window.location.href = '/login'; });
+    });
+
+    loadData();
+    
+    function formatDate(d) {
+        return d.getFullYear() + '-' +
+            String(d.getMonth() + 1).padStart(2, '0') + '-' +
+            String(d.getDate()).padStart(2, '0');
+    }
+
+    function formatShortDate(dateStr) {
+        var d = new Date(dateStr);
+        var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        return months[d.getMonth()] + ' ' + d.getDate();
+    }
+
+    function showError(msg) {
+        var box = document.getElementById('errorBox');
+        box.textContent = msg; box.style.display = 'block';
+    }
+    function hideError() { document.getElementById('errorBox').style.display = 'none'; }
+
+    function getBounceColor(rate) {
+        if (rate <= 40) return '#0cce6b';
+        if (rate <= 70) return '#ffa400';
+        return '#ff4e42';
+    }
+
+    function getLoadColor(ms) {
+        if (ms <= 2000) return '#0cce6b';
+        if (ms <= 4000) return '#ffa400';
+        return '#ff4e42';
+    }
+
+    function getErrorColor(count) {
+        if (count === 0) return '#0cce6b';
+        if (count <= 10) return '#ffa400';
+        return '#ff4e42';
+    }
+
+    async function loadData() {
+        hideError();
+        var start = document.getElementById('startDate').value;
+        var end   = document.getElementById('endDate').value;
+        if (!start || !end) { showError('Please select both a start and end date.'); return; }
+
+        try {
+            // Fetch dashboard summary
+            var dashRes = await fetch('/api/dashboard?start=' + encodeURIComponent(start) + '&end=' + encodeURIComponent(end), { credentials: 'include' });
+
+            var dashJson = await dashRes.json();
+
+            if (dashRes.status === 401) {
+                window.location.href = '/login'; return;
+            }
+
+            if (!dashJson.success)    { showError(dashJson.error    || 'Failed to load dashboard data.'); return; }
+
+            var summary = dashJson.data;
+            var topPages = summary.topPages || [];
+            var byDay = summary.byDay || [];
+            var stats = {
+                avg_duration_sec: summary.avg_duration_sec,
+                avg_pages: summary.avg_pages,
+                bounce_rate_pct: summary.bounce_rate_pct
+            };
+
+            renderCards(summary, stats);
+            renderTrendChart(byDay);
+            renderTopChart(topPages);
+            renderTable(topPages);
+        } catch (err) {
+            showError('Network error: could not reach the API.');
+        }
+    }
+
+    function renderCards(summary, stats) {
+        var cards = document.getElementById('cards');
+        cards.innerHTML = '';
+
+        var bounceRate = stats.bounce_rate_pct || 0;
+        var loadMs     = summary.avg_load_time_ms || 0;
+        var errors     = summary.total_errors || 0;
+
+        var items = [
+            { label: 'Total pageviews',      value: (summary.total_pageviews || 0).toLocaleString(), color: '#2E86C1', rating: null },
+            { label: 'Total sessions',        value: (summary.total_sessions  || 0).toLocaleString(), color: '#2E86C1', rating: null },
+            { label: 'Avg session duration',  value: (stats.avg_duration_sec  || 0) + 's',            color: '#2E86C1', rating: null },
+            { label: 'Pages per session',     value: stats.avg_pages || '—',                          color: '#2E86C1', rating: null },
+            { label: 'Bounce rate',           value: bounceRate + '%',  color: getBounceColor(bounceRate), rating: bounceRate <= 40 ? 'Good' : bounceRate <= 70 ? 'Needs work' : 'Poor' },
+            { label: 'Avg load time',         value: loadMs + 'ms',     color: getLoadColor(loadMs),      rating: loadMs <= 2000 ? 'Good' : loadMs <= 4000 ? 'Needs work' : 'Poor' },
+            { label: 'Total errors',          value: errors.toLocaleString(), color: getErrorColor(errors), rating: errors === 0 ? 'Clean' : errors <= 10 ? 'Monitor' : 'Investigate' },
+        ];
+
+        items.forEach(function (m) {
+            var card = document.createElement('div');
+            card.className = 'card';
+            card.style.background = m.color;
+            card.innerHTML = '<div class="label">' + m.label + '</div>' +
+                             '<div class="value">' + m.value + '</div>' +
+                             (m.rating ? '<div class="rating">' + m.rating + '</div>' : '');
+            cards.appendChild(card);
+        });
+    }
+
+    function renderTrendChart(byDay) {
+        if (trendChart) { trendChart.destroy(); }
+        if (!byDay.length) return;
+        trendChart = new Chart(document.getElementById('trendChart'), {
+            type: 'line',
+            data: {
+                labels: byDay.map(function (d) { return formatShortDate(d.day); }),
+                datasets: [{
+                    label: 'Pageviews',
+                    data: byDay.map(function (d) { return Number(d.views); }),
+                    borderColor: '#2E86C1',
+                    backgroundColor: 'rgba(46,134,193,0.1)',
+                    tension: 0.3,
+                    fill: true,
+                    pointRadius: 3
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { display: false } },
+                scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+            }
+        });
+    }
+
+    function renderTopChart(topPages) {
+        if (topChart) { topChart.destroy(); }
+        if (!topPages.length) return;
+
+        var labels = topPages.map(function (p) {
+            try {
+                var u = new URL(p.url);
+                return u.search ? u.pathname + u.search : u.pathname;
+            } catch { return p.url; }
+        });
+
+        // Reverse so highest bar is at top
+        var reversedLabels = labels.slice().reverse();
+        var reversedData   = topPages.map(function (p) { return Number(p.views); }).reverse();
+
+        topChart = new Chart(document.getElementById('topChart'), {
+            type: 'bar',
+            data: {
+                labels: reversedLabels,
+                datasets: [{
+                    label: 'Views',
+                    data: reversedData,
+                    backgroundColor: '#2E86C1',
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { beginAtZero: true, ticks: { precision: 0 } },
+                    y: { ticks: { font: { size: 11 } } }
+                }
+            }
+        });
+    }
+
+    function renderTable(topPages) {
+        var tbody = document.getElementById('pagesBody');
+        tbody.innerHTML = '';
+        if (!topPages.length) {
+            tbody.innerHTML = '<tr><td colspan="2" class="empty-state">No data for selected range.</td></tr>';
+            return;
+        }
+        // Show top 5 only on overview (users can press "See all --> to get the full report")
+        topPages.slice(0, 5).forEach(function (p) {
+            var tr = document.createElement('tr');
+            var tdUrl = document.createElement('td');
+            tdUrl.className = 'url-cell';
+            tdUrl.textContent = p.url;
+            tdUrl.title = p.url;
+            var tdViews = document.createElement('td');
+            tdViews.textContent = Number(p.views).toLocaleString();
+            tdViews.style.textAlign = 'right';
+            tr.appendChild(tdUrl);
+            tr.appendChild(tdViews);
+            tbody.appendChild(tr);
+        });
+    }
+})();
+</script>
+</body>
+</html>
